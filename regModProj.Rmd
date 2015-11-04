@@ -1,0 +1,134 @@
+---
+title: "Regression Models Project"
+author: "Mark S."
+date: "Thursday, May 21, 2015"
+output: pdf_document
+---
+
+### I. Executive Summary
+The goal of this project is to analyze vehicle data (mtcars data set) with respect to MPG. We wish to answer the following questions:
+
+1. Is automatic or manual transmission better for MPG?
+2. How much different is MPG between automatic and manual transmission vehicles?
+
+Using a linear model to fit the data, we are 95% confident that there is no significant difference in mpg based on transmission type. According to the model, we see a difference of $2.9 \pm 1.4$ mpg between transmission types, but our analysis shows that this is not significant enough to claim a difference between transmission types with respect to MPG.
+
+### II. Exploratory Data Analysis
+We would like to know which variables influence MPG, and we would like to quantify the difference in MPG by transmission type. We'll first inspect the correlations of all variables, and take a look at the MPG for each transmission type. A level plot of the correlation matrix is a usefual way to visualize these correlations, and a boxplot can help us visualize the difference between each transmission type. **Please see appendix for these plots.**
+
+
+```{r, echo=FALSE}
+suppressWarnings(suppressMessages(library(dplyr)))
+suppressWarnings(suppressMessages(library(corrplot)))
+library(car)
+library("RColorBrewer")
+library("grid")
+library(lattice)
+
+data(mtcars)
+df<- tbl_df(mtcars)
+df1<-df
+df1$am<- as.factor(df1$am)
+levels(df1$am)<- c("Auto","Man")
+
+
+#corrplot.mixed(cor(df),mar=c(0,0,1,0), main= "Correlation Plot")
+round(cor(df),2)
+#tbl_df(round(as.data.frame(cor(df)),3))
+```
+
+
+
+Note that many variables (predictors) are correlated with mpg, and many correlations exist between the predictors themselves. This hints that a model with few predictors may be possible. Based on the boxplot, it appears that there is a clear difference in MPG for each transmission type. However, the difference we see may be due to other confounding variables. In order to make an accurate comparison between transmission types, we must account for the other variables. To do this, we need to model the data.
+
+### III. Model Selection
+Refer to the appendix for a detailed explanation of the model selection. The model selected takes the form: $\mathrm{mpg} = 9.618 + 2.936 \times \mathrm{am} + 1.226 \times \mathrm{qsec} - 3.917 \times \mathrm{wt}$. The following summarizes the model:
+
+```{r}
+fit2<- lm(mpg~am+qsec+wt,df)
+(summary(fit2)$coef)
+round(summary(fit2)$adj.r.squared,3)
+round(cor(fit2$residuals,select(df,-mpg,-am,-qsec,-wt)),3)
+```
+
+The model explains approximately 83% of the variance of the mpg data using the predictors am, qsec, and wt. This model tells us that, all else being equal, a vehicle with a manual transmission will have $2.9 \pm 1.4$ mpg greater than that of a vehicle with an automatic transmission.
+
+### IV. Results and Conclusions
+The difference in MPG for transmission types is less when we take into account other confounding variables. To quantify the difference in MPG for transmission types under the new model, we will use the residuals after accounting for wt and qsec. A t-test will allow us to determine if there is a significant difference between transmission types:
+
+```{r}
+mpg.adj<- resid(lm(mpg~wt+qsec,df1))
+
+#t-test for
+#adjusted mpg for each transmission type
+t.test(mpg.adj[df1$am=="Auto"],mpg.adj[df1$am=="Man"])
+```
+
+This t-test compares the difference in means of mpg of each transmission type, when accounting for the wt and qsec predictors. The test results in a p-value of 0.20 which is greater than 0.05, and thus we fail to reject the null hypothesis. **Based on these results, all else being equal, we are 95% confident that there is not a significant difference in MPG between vehicles with automatic or manual transmissions.**
+
+### V. Appendix
+#### A. Exploratory Data Analysis Plots
+
+The first plot is a levelplot, used to help visualize the correlations of variables in the data.
+The second plot is a boxplot of the mpg data for each transmission type.
+```{r, echo=FALSE}
+brewer.div = colorRampPalette(brewer.pal(11, "PRGn"), interpolate = "spline")
+
+levelplot(cor(df),at=do.breaks(c(-1.01,1.01),20),
+          main="Correlation Level Plot", xlab="",ylab="",aspect=1,
+          #panel=panel.corrgram.2,
+          colorkey=list(space="top"),pretty=TRUE, 
+          #col.regions=colorRampPalette(c("red","white","blue")),
+          col.regions=brewer.div(200),
+          scales=list(x=list(rot=90)))
+boxplot(df1$mpg~df1$am,col="green",ylab="mpg",xlab="am",main="MPG vs AM")
+```
+
+#### B. Model Selection
+
+The exploratory analysis suggests a model with few predictors may be possible. The model selection process will begin with a base model with one predictor (transmission type). Additional predictors will be added one at a time, according to their correlation with the residuals of the current model. The adjusted r^2^ value and variable inflation factors will be monitored to avoid having too many unnecessary predictors in the model.
+
+We start by fitting the base model with mpg as the outcome and transmission type (am) as the predictor:
+
+```{r}
+fit0<- lm(mpg~am,df1)
+summary(fit0)$coef
+round(summary(fit0)$adj.r.squared,3)
+```
+This model quantifies the relationship we see in the boxplot. The intercept coefficient represents the mpg we should expect for a vehicle with an automatic transmission. The "amMan" coefficient is the additional mpg we add to the intercept if the vehicle has a manual transmission. The model equation looks like this: $y = 17.147 + 7.245 x$, where $x$ represents transmission type ($x=0$ for automatic, $x=1$ for manual), and $y$ is the expected mpg. If the transmission is automatic ($x = 0$), then we expect 17.147 mpg for the vehicle. If the transmission is manual ($x = 1$), then we expect 24.392 mpg for the vehicle. The model, as is, only explains approximately 34% of the variance of mpg, so we need to add more predictors.
+
+To select the next variable, we first look at which variables are most correlated with the model residuals:
+
+```{r}
+round(cor(fit0$residuals,select(df,-mpg,-am)),3)
+```
+
+Horsepower (hp) is most correlated, so it is added to the model:
+
+```{r}
+fit1<- lm(mpg~am+hp,df)
+(summary(fit1)$coef)
+round(summary(fit1)$adj.r.squared,3)
+round(cor(fit1$residuals,select(df,-mpg,-am,-hp)),3)
+```
+
+The model is improving, but there are still correlations between the model residuals and predictors. This process is repeated, and eventually the predictors am, qsec, and wt are selected for the model (see Appendix for model diagnostics):
+
+```{r}
+fit2<- lm(mpg~am+qsec+wt,df)
+(summary(fit2)$coef)
+round(summary(fit2)$adj.r.squared,3)
+round(cor(fit2$residuals,select(df,-mpg,-am,-qsec,-wt)),3)
+```
+
+The final model takes the form: $\mathrm{mpg} = 9.618 + 2.936 \times \mathrm{am} + 1.226 \times \mathrm{qsec} - 3.917 \times \mathrm{wt}$, where $\mathrm{am} =0$ for automatic transmission and $\mathrm{am} = 1$ for manual transmission.
+
+#### C. Model Diagnostics
+
+The diagnostic plots show that the residuals appear to be normally distributed, with no observable pattern. The normal Q-Q plot shows a few outliers that the model does not fit particularly well, but the Residual vs Leverage plot shows that they will not significantly change the model by being removed:  (**Note: The plots were distorted via knitr, and it may be difficult to read the details**)
+```{r,echo=FALSE,fig.width=10,fig.height=8}
+par(mfrow=c(2,2))
+plot(fit2)
+```
+
+
